@@ -1,9 +1,10 @@
-processdata class includes the data cleaning procedure. I remove the feature that includes a lot of Nan and get the feature I want to have. 
-The getBinary(unique, id) is to get binary matrix, the input should be unique words and the products.
-get_signature_matrix(binMat, numbPerm) is to get signiture matrix, the input of this should be binary matrix and number of permutation. the output of it is the signature matrix
-lsh_cal(signatureMat, num_bands) is applying LSH take the signiture matrix as input and number of bands, return the candidate pairs
-disMatrix(candidate, binaryMatrix, shop, brand, refresh, size) is to generate distance matrix for clustering
-cluster_algorithm(threshold, dissimilarity_matrix) using the hierarchical algorithm to get the result
- getTruePairs (df) is for getting the true pairs, you need to input the data frame
- tuning_cluster(dissimilarity_matrix, truePairs, candidate_pairs) is to test the performance and also based on the performance to get the
- result 
+readJson.py is a class used to read JSON and save the document as a pandas data frame. It splits the data with a specific ratio. To run the method getBootstrapSamples(), one needs to put the number of Bootstraps you want to have and the ratio for each Bootstrap as input. The outputs are a list of Bootstaps and a list of reminders. Each sample is a pandas data frame.
+processdata.py is a class file. It is about the data cleaning procedure. To clean the data, one needs to know the existing brands and what kind of patterns you want to remove. In addition, in this file, I removed the features that included a lot of Nan (more than 50%). The output is a pandas data frame that includes model ID, selected features, and titles. 
+The getBinary(unique, id) function is simply to get a binary matrix. The input should be unique words of all products and the products.
+get_signature_matrix(binMat, numbPerm) is a fast way to get signature matrices. This function's input and the number of permutations should be a binary matrix, and the output should be a signature matrix with a size with the number of permutations times the number of products (the number of binMat's columns).
+lsh_cal(signatureMat, num_bands) is applying LSH technique. It takes the signature matrix as input and the number of bands chosen, returning the candidate pairs. The idea of this function is to 
+disMatrix(candidate, binaryMatrix, brand, refresh, size) is used to generate a distance matrix for clustering. The selected features are the brand, refresh rate, and screen size. One can use class processData's method to get them or call from the data frame.
+cluster_algorithm(threshold, dissimilarity_matrix) using the hierarchical algorithm with complete linkage to get the candidate pairs.
+getTruePairs (df) is for getting the true pairs. One needs to put the original data frame with modelID (dependent variable) as an input. 
+tuning_cluster(dissimilarity_matrix, truePairs, candidate_pairs) is to tune the clustering method to find the optimal threshold. The thresholds are chosen based on the performance F1 score to get the result. It returns a list of dictionaries. Each dictionary includes the performance of pair quality, pair completeness, F1 score, threshold, a fraction of comparison, and number of candidate Paris. 
+Some functions I do mention here, such as F1 and cosin_distance, they are just used by some other functions to get a result. 
