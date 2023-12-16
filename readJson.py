@@ -30,10 +30,13 @@ class readJson:
     def getBootstrapSamples(self, numbbooststrap, ratio):
         
         bootstrap_samples = []  # List to hold the bootstrap samples
-
-        for i in range(numbbooststrap):
-            sample = self.df.sample(frac = ratio, replace=True, random_state = i).reset_index(drop=True)  # Create a bootstrap sample
-            bootstrap_samples.append(sample)  # Append the sample to the list
+        test_data = [] 
         
-        return bootstrap_samples
+        for i in range(numbbooststrap):
+            sample = self.df.sample(frac = ratio, replace=True, random_state = i) # Create a bootstrap sample
+            df2 = self.df.loc[self.df.index.difference(sample.index)]
+            bootstrap_samples.append(sample.reset_index(drop=True))  # Append the sample to the list
+            test_data.append(df2.reset_index(drop=True))
+        
+        return bootstrap_samples, test_data
             
