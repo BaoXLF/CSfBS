@@ -20,23 +20,22 @@ def getBinary(unique, id):
     
     return binary_matrix
 
-def get_signature_matrix(binMat, numbPerm):
+def get_signature_matrix(binMat, numbBands, numbRows):
     
+    numbPerm = numbBands * numbRows
     numbWords, numbSig = binMat.shape
-    
     sigMat = np.full((numbPerm, numbSig), np.inf)
     
     def shufllPermu(numbWords):
         sequence = np.arange(1, numbWords + 1)
         np.random.shuffle(sequence)
         return sequence
-
      
     for i in range(numbPerm): 
         
         signature = np.full((1, numbSig), np.inf)
         permuntation = shufllPermu(numbWords)
-        print(permuntation)
+        # print(permuntation)
         for row in range(numbWords):
             nonzero_indices = np.where(binMat.iloc[row,:] == 1)[0]
             # print(nonzero_indices)
@@ -58,7 +57,7 @@ def lsh_cal(signatureMat, num_bands):
 
     signatureMat = pd.DataFrame(signatureMat)
     candidate = []
-    # Use numpy.array_split to split the DataFrame into 20 subgroups
+    # Use numpy.array_split to split the DataFrame into subgroups
     for q, subset in enumerate(np.array_split(signatureMat, num_bands, axis=0)):
         bucket = []
         for col in subset.columns:
@@ -72,34 +71,31 @@ def lsh_cal(signatureMat, num_bands):
             for j in  range(i+1,len(bucket)):
                 if bucket[i] == bucket[j] :
                     candidate.append((i,j))
-                    # candidate.append((j,i))
                     
     candidate_list = list(set(candidate)) # here i should divide the length by 2
     return candidate_list
 
+def cosine_distance(productA, productB):
+    
+    cosin = np.dot(productA, productB)/(np.linalg.norm(productA)*np.linalg.norm(productB))
+    return 1 - cosin
+    
 # get dissimilarity matrix
-def disMatrix(candidate, binaryMatrix, shop, brand, refresh, size):
+def disMatrix(candidate, binaryMatrix, brand, refresh, size):
     
     numbWord, numbSig = binaryMatrix.shape
     dissim_matrix = np.ones((numbSig, numbSig))
     
-    def cosine_distance(A,B):
-        
-        distanceAB = 1 - np.dot(A, B)/(np.linalg.norm(A)*np.linalg.norm(B))
-        
-        return distanceAB
-       
     for row in candidate:
         
         if brand[row[0]] == brand[row[1]] or (pd.isna(brand[row[0]]) and pd.isna(brand[row[1]])):
             if refresh[row[0]] == refresh[row[1]] or (pd.isna(refresh[row[1]]) or pd.isna(refresh[row[1]])):
                 if size[row[0]] == size[row[1]] or (pd.isna(size[row[0]]) or pd.isna(size[row[1]])):
-                    if shop[row[0]] != shop[row[1]]:
                 
-                        dist = cosine_distance(np.array(binaryMatrix.iloc[:, row[0]]), np.array(binaryMatrix.iloc[:, row[1]]))
+                    dist = cosine_distance(np.array(binaryMatrix.iloc[:, row[0]]), np.array(binaryMatrix.iloc[:, row[1]]))
                         
-                        dissim_matrix[row[0],row[1]] = dist
-                        dissim_matrix[row[1],row[0]] = dist
+                    dissim_matrix[row[0],row[1]] = dist
+                    dissim_matrix[row[1],row[0]] = dist
         
     return dissim_matrix
 
@@ -133,16 +129,18 @@ def getTruePairs (df):
             
     return duplicate_list
 
-
-def tuning_cluster(dissimilarity_matrix, truePairs, candidate_pairs):
+def F1(precision, recall):
+    f1 = (2*precision*recall)/(precision+recall)
+    return f1
+        
+def tuning_cluster(dissimilarity_matrix, truePairs, candidate_pairs, tuning_parameters):
     
-    tuning_parameters = [0.1,0.3,0.5,0.75,0.9]
     ntruePairs = len(truePairs)
     
     savelist = {}
     f1_scores = []
-    for j in tuning_parameters:
-        pairs = cluster_algorithm(j, dissimilarity_matrix)
+    for para in tuning_parameters:
+        pairs = cluster_algorithm(para, dissimilarity_matrix)
         # Calculate TP, TN, FP, FN
         set_candidate_pairs = set(map(tuple, pairs))
         set_true_duplicates = set(map(tuple, truePairs))
@@ -158,25 +156,16 @@ def tuning_cluster(dissimilarity_matrix, truePairs, candidate_pairs):
         
         precision_PQ = TP/(TP+FP)
         recall_PC = TP/(TP + FN)
-        
-        def F1(precision, recall):
-            f1 = (2*precision*recall)/(precision+recall)
-            return f1
-        
         F1_value = F1(precision_PQ, recall_PC)
-        
-        # pair_quality = TP/(len(pairs))
-        # pair_completeness = TP/len(truePairs)
-        # F1 = (2 * pair_quality * pair_completeness)/(pair_quality + pair_completeness)
-        numbPair = len(pairs)
+
         fraction_comp = len(candidate_pairs) / len(all_pairs)
-        savelist[F1_value] =  [precision_PQ, recall_PC, fraction_comp, j, numbPair]
+        savelist[F1_value] =  [precision_PQ, recall_PC, fraction_comp, para, npair]
         f1_scores.append(F1_value)
         
     f1_score = max(f1_scores)
     rest = savelist[f1_score]
     
-    return {'pair_quality(precision)': rest[0], 'pair_completeness(recall)': rest[1], 'F1': f1_score, 'fraction_comp' : rest[2], 'threshold': rest[3], 'numbPair': numbPair}
+    return {'pair_quality(precision)': rest[0], 'pair_completeness(recall)': rest[1], 'F1': f1_score, 'fraction_comp' : rest[2], 'threshold': rest[3], 'numbPair': npair}
     
 # clean data and get classifiction conditions.
 patterns = {'newegg.com': ' ',
@@ -216,33 +205,38 @@ brands =  ["philips", "supersonic", "sharp", "samsung",
             "elo", "pyle", "gpx", "sigmac", 
             "venturer", "elite"]
 
-# all variables will be used
-b = 50
-r = 2
-numbPerm = r*b
+
 # read data and also generate Booststrap samples
+numbBoot = 5
+ratio = 0.63
+tOfFeature = 0.5
+file_name = 'TVs-all-merged.json'
+tuning_parameters = [0.1, 0.3, 0.5, 0.75, 0.9]
+b = 20
+r = 5
 
-readData = readJson('TVs-all-merged.json')
+# run an example to test the code
+def example_code(file_name, numbBoot, ratio, tuning_parameters, b, r, patterns, brands, tOfFeature):
+    readData = readJson(file_name)
+    Booststrap, test = readData.getBootstrapSamples(numbBoot, ratio)
+    result_list = []
+    for i in range(len(Booststrap)):
+        
+        clean = processData(Booststrap[i], patterns, brands, tOfFeature)
+        cleanedDat, uniqueWords, id = clean.preProcessData()
+        brand = clean.getBrand(cleanedDat)
+        size = clean.getScreenSize(cleanedDat)
+        refresh = clean.getRefresh(cleanedDat)
+        
+        binMat = getBinary(uniqueWords, id)
+        signMat = get_signature_matrix(binMat, b, r)
+        candidate_pairs = lsh_cal(signMat, b)
+        dissimilarity_matrix = disMatrix(candidate_pairs, binMat, brand, refresh, size)
+        truePairs = getTruePairs(cleanedDat)
+        result = tuning_cluster(dissimilarity_matrix, truePairs, candidate_pairs, tuning_parameters)
+        
+        result_list.append(result)
+    
+    return result_list
 
-Booststrap = readData.getBootstrapSamples(5, 0.63)
-
-result_list = []
-
-for i in range(len(Booststrap)):
-    
-    clean = processData(Booststrap[i], patterns, brands, 0.5)
-    cleanedDat, uniqueWords, id = clean.preProcessData()
-    brand = clean.getBrand(cleanedDat)
-    shop = clean.getShop(cleanedDat)
-    size = clean.getScreenSize(cleanedDat)
-    refresh = clean.getRefresh(cleanedDat)
-    
-    binMat = getBinary(uniqueWords, id)
-    signMat = get_signature_matrix(binMat, numbPerm)
-    candidate_pairs = lsh_cal(signMat, b)
-    dissimilarity_matrix = disMatrix(candidate_pairs, binMat, shop, brand, refresh, size)
-    truePairs = getTruePairs(cleanedDat)
-    result = tuning_cluster(dissimilarity_matrix, truePairs, candidate_pairs)
-    
-    result_list.append(result)
-    
+print(example_code(file_name, numbBoot, ratio, tuning_parameters, b, r, patterns, brands,tOfFeature))
